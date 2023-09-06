@@ -1,0 +1,333 @@
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  MyS3Bucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: ta-storage-bucket
+
+  UsersDynamoTable:
+    Type: "AWS::DynamoDB::Table"
+    Properties:
+      TableName: users
+      AttributeDefinitions:
+        - AttributeName: email
+          AttributeType: S
+      KeySchema:
+        - AttributeName: email
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  FilesDynamoTable:
+    Type: "AWS::DynamoDB::Table"
+    Properties:
+      TableName: files
+      AttributeDefinitions:
+        - AttributeName: fileKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: fileKey
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  MySNSTopic:
+    Type: "AWS::SNS::Topic"
+    Properties:
+      TopicName: ta-sendEmail
+      DisplayName: TA Send Email
+
+  MyHttpAPI:
+    Type: "AWS::ApiGatewayV2::Api"
+    Properties:
+      Name: "MyHttpAPI"
+      ProtocolType: "HTTP"
+      CorsConfiguration:
+        AllowMethods:
+          - "GET"
+          - "POST"
+          - "PUT"
+          - "DELETE"
+        AllowOrigins:
+          - "*"
+        AllowHeaders:
+          - "*"
+
+  SignupLambda:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      FunctionName: "SignupLambda"
+      Runtime: "nodejs14.x"
+      Handler: "index.handler"
+      Role: "arn:aws:iam::414423038363:role/LabRole"
+      Code:
+        S3Bucket: "ta-lambda-files"
+        S3Key: "ta-signup.zip"
+
+  SignupLambdaExecutionPermission:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName: !Ref SignupLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${MyHttpAPI}/*/*"
+
+  SignupFunctionIntegration:
+    Type: "AWS::ApiGatewayV2::Integration"
+    DependsOn:
+      - SignupLambda
+    Properties:
+      ApiId: !Ref MyHttpAPI
+      IntegrationType: "AWS_PROXY"
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SignupLambda.Arn}/invocations"
+      PayloadFormatVersion: "2.0"
+
+  SignupLambdaRoute:
+    Type: "AWS::ApiGatewayV2::Route"
+    DependsOn:
+      - SignupFunctionIntegration
+    Properties:
+      ApiId: !Ref MyHttpAPI
+      RouteKey: "POST /signup"
+      Target: !Sub "integrations/${SignupFunctionIntegration}"
+
+  LoginLambda:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      FunctionName: "LoginLambda"
+      Runtime: "nodejs14.x"
+      Handler: "index.handler"
+      Role: "arn:aws:iam::414423038363:role/LabRole"
+      Code:
+        S3Bucket: "ta-lambda-files"
+        S3Key: "ta-login.zip"
+
+  LoginLambdaExecutionPermission:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName: !Ref LoginLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${MyHttpAPI}/*/*"
+
+  LoginFunctionIntegration:
+    Type: "AWS::ApiGatewayV2::Integration"
+    DependsOn:
+      - LoginLambda
+    Properties:
+      ApiId: !Ref MyHttpAPI
+      IntegrationType: "AWS_PROXY"
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LoginLambda.Arn}/invocations"
+      PayloadFormatVersion: "2.0"
+
+  LoginLambdaRoute:
+    Type: "AWS::ApiGatewayV2::Route"
+    DependsOn:
+      - LoginFunctionIntegration
+    Properties:
+      ApiId: !Ref MyHttpAPI
+      RouteKey: "POST /login"
+      Target: !Sub "integrations/${LoginFunctionIntegration}"
+
+  UploadFileLambda:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      FunctionName: "UploadFileLambda"
+      Runtime: "nodejs14.x"
+      Handler: "index.handler"
+      Role: "arn:aws:iam::414423038363:role/LabRole"
+      Code:
+        S3Bucket: "ta-lambda-files"
+        S3Key: "ta-uploadFile.zip"
+
+  UploadFileLambdaExecutionPermission:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName: !Ref UploadFileLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${MyHttpAPI}/*/*"
+
+  UploadFileFunctionIntegration:
+    Type: "AWS::ApiGatewayV2::Integration"
+    DependsOn:
+      - UploadFileLambda
+    Properties:
+      ApiId: !Ref MyHttpAPI
+      IntegrationType: "AWS_PROXY"
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${UploadFileLambda.Arn}/invocations"
+      PayloadFormatVersion: "2.0"
+
+  UploadFileLambdaRoute:
+    Type: "AWS::ApiGatewayV2::Route"
+    DependsOn:
+      - UploadFileFunctionIntegration
+    Properties:
+      ApiId: !Ref MyHttpAPI
+      RouteKey: "POST /uploadFile"
+      Target: !Sub "integrations/${UploadFileFunctionIntegration}"
+
+  GetFilesLambda:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      FunctionName: "GetFilesLambda"
+      Runtime: "nodejs14.x"
+      Handler: "index.handler"
+      Role: "arn:aws:iam::414423038363:role/LabRole"
+      Code:
+        S3Bucket: "ta-lambda-files"
+        S3Key: "ta-getFiles.zip"
+
+  GetFilesLambdaExecutionPermission:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName: !Ref GetFilesLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${MyHttpAPI}/*/*"
+
+  GetFilesFunctionIntegration:
+    Type: "AWS::ApiGatewayV2::Integration"
+    DependsOn:
+      - GetFilesLambda
+    Properties:
+      ApiId: !Ref MyHttpAPI
+      IntegrationType: "AWS_PROXY"
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetFilesLambda.Arn}/invocations"
+      PayloadFormatVersion: "2.0"
+
+  GetFilesLambdaRoute:
+    Type: "AWS::ApiGatewayV2::Route"
+    DependsOn:
+      - GetFilesFunctionIntegration
+    Properties:
+      ApiId: !Ref MyHttpAPI
+      RouteKey: "POST /getFiles"
+      Target: !Sub "integrations/${GetFilesFunctionIntegration}"
+
+  GetDownloadUrlLambda:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      FunctionName: "GetDownloadUrlLambda"
+      Runtime: "nodejs14.x"
+      Handler: "index.handler"
+      Role: "arn:aws:iam::414423038363:role/LabRole"
+      Code:
+        S3Bucket: "ta-lambda-files"
+        S3Key: "ta-getDownloadUrl.zip"
+
+  GetDownloadUrlLambdaExecutionPermission:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName: !Ref GetDownloadUrlLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${MyHttpAPI}/*/*"
+
+  GetDownloadUrlFunctionIntegration:
+    Type: "AWS::ApiGatewayV2::Integration"
+    DependsOn:
+      - GetDownloadUrlLambda
+    Properties:
+      ApiId: !Ref MyHttpAPI
+      IntegrationType: "AWS_PROXY"
+      IntegrationUri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetDownloadUrlLambda.Arn}/invocations"
+      PayloadFormatVersion: "2.0"
+
+  GetDownloadUrlLambdaRoute:
+    Type: "AWS::ApiGatewayV2::Route"
+    DependsOn:
+      - GetDownloadUrlFunctionIntegration
+    Properties:
+      ApiId: !Ref MyHttpAPI
+      RouteKey: "POST /getDownloadUrl"
+      Target: !Sub "integrations/${GetDownloadUrlFunctionIntegration}"
+
+  APIGatewayStage:
+    Type: "AWS::ApiGatewayV2::Stage"
+    Properties:
+      ApiId: !Ref MyHttpAPI
+      StageName: "$default"
+      AutoDeploy: true
+
+  DeleteFilesLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      FunctionName: "DeleteFilesLambdaFunction"
+      Runtime: "nodejs14.x"
+      Handler: "index.handler"
+      Role: "arn:aws:iam::414423038363:role/LabRole"
+      Code:
+        S3Bucket: "ta-lambda-files"
+        S3Key: "ta-deleteFiles.zip"
+
+  ScheduleEventRule:
+    Type: "AWS::Events::Rule"
+    DependsOn:
+      - MyS3Bucket
+      - UsersDynamoTable
+      - FilesDynamoTable
+      - MySNSTopic
+    Properties:
+      Name: "Rule"
+      ScheduleExpression: cron(58 23 * * ? *)
+      State: "ENABLED"
+      Targets:
+        - Arn: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${DeleteFilesLambdaFunction}"
+          Id: "DeleteFilesLambdaFunction"
+          
+  LambdaScheduleExecutionPermission:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName: !Ref DeleteFilesLambdaFunction
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt ScheduleEventRule.Arn
+
+  FrontendApplication:
+    Type: "AWS::ElasticBeanstalk::Application"
+    Properties:
+      ApplicationName: "MyHttpAPI"
+      Description: "Application"
+
+  ApplicationVersion:
+    Type: "AWS::ElasticBeanstalk::ApplicationVersion"
+    Properties:
+      ApplicationName: !Ref FrontendApplication
+      Description: "Application Version"
+      SourceBundle:
+        S3Bucket: "ta-lambda-files"
+        S3Key: "front-end.zip"
+
+  FrontendEnvironment:
+    Type: "AWS::ElasticBeanstalk::Environment"
+    Properties:
+      ApplicationName: !Ref FrontendApplication
+      Description: "Environment"
+      EnvironmentName: "MyHttpAPI"
+      SolutionStackName: "64bit Amazon Linux 2 v5.8.4 running Node.js 18"
+      VersionLabel: !Ref ApplicationVersion
+      OperationsRole: "arn:aws:iam::414423038363:role/LabRole"
+      Tier:
+        Name: "WebServer"
+        Type: "Standard"
+      OptionSettings:
+        - Namespace: "aws:elasticbeanstalk:environment"
+          OptionName: EnvironmentType
+          Value: "SingleInstance"
+        - Namespace: "aws:elasticbeanstalk:environment"
+          OptionName: ServiceRole
+          Value: arn:aws:iam::414423038363:role/LabRole
+        - Namespace: "aws:autoscaling:launchconfiguration"
+          OptionName: "IamInstanceProfile"
+          Value: "LabInstanceProfile"
+        - Namespace: "aws:elasticbeanstalk:application:environment"
+          OptionName: "REACT_APP_API_URL"
+          Value: !Sub "https://${MyHttpAPI}.execute-api.${AWS::Region}.amazonaws.com"
+
+Outputs:
+  ApplicationURL:
+    Description: "Application URL"
+    Value: !Join ["", ["http://", !GetAtt FrontendEnvironment.EndpointURL]]
